@@ -10,30 +10,33 @@
 <div class="container">
     <div class="hero">
         <h1>{{ app_name }}</h1>
-        <p>上传 PDF 和多张图片，系统会先定位固定文字，再用 AI 判断图片应该跟哪个锚点绑定，最后生成新的 PDF。</p>
+        <p>上传 PDF / Word 和多张图片，系统会定位锚点，结合训练规则 + AI 自动判断插图位置并生成新文件。</p>
     </div>
 
     <div class="card">
         <form action="/process" method="post" enctype="multipart/form-data">
-            <label>1. 上传 PDF</label>
-            <input type="file" name="pdf_file" accept=".pdf" required>
+            <label>1. 上传文档（PDF 或 Word）</label>
+            <input type="file" name="doc_file" accept=".pdf,.docx" required>
 
             <label>2. 上传图片（可多选）</label>
             <input type="file" name="images" accept="image/*" multiple required>
 
             <label>3. 输入固定锚点文字（每行一个）</label>
-            <textarea name="anchors_text" rows="8" required>{{ default_anchors }}</textarea>
+            <textarea name="anchors_text" rows="7" required>{{ default_anchors }}</textarea>
+
+            <label>4. 训练规则（可选，每行：关键词|锚点|模式）</label>
+            <textarea name="training_rules_text" rows="6">{{ default_training_rules }}</textarea>
 
             <button type="submit">开始处理</button>
         </form>
     </div>
 
     <div class="tips">
-        <h3>建议</h3>
+        <h3>训练说明</h3>
         <ul>
-            <li>第一版先用“文字型 PDF”，不要一上来就拿纯扫描件测试。</li>
-            <li>锚点文字要和 PDF 中完全一致，包括冒号和空格。</li>
-            <li>如果没有配置 AI key，系统会按图片顺序依次匹配锚点，方便你先联通流程。</li>
+            <li>规则示例：<code>site|现场照片：|below</code>，表示文件名包含 site 的图片优先放到“现场照片：”。</li>
+            <li>模式支持：below / right / appendix_page（Word 目前会自动回落为 below）。</li>
+            <li>规则会持久保存，后续任务自动复用，相当于“轻量训练”。</li>
         </ul>
     </div>
 </div>
