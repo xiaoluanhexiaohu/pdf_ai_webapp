@@ -1,29 +1,28 @@
 from __future__ import annotations
 
-import base64
 import json
+import mimetypes
 from pathlib import Path
 from typing import Any, Dict, List
 
 try:
-    from openai import OpenAI
+    import google.generativeai as genai
 except Exception:  # pragma: no cover
-    OpenAI = None
+    genai = None
 
 from app.schemas.placement import PlacementDecision
 
 
-class AIMatcher:
-    def __init__(self, api_key: str = "", model: str = "gpt-4.1-mini", training_rules: List[Dict[str, Any]] | None = None):
+class GeminiMatcher:
+    def __init__(self, api_key: str = "", model: str = "gemini-2.5-flash", training_rules: List[Dict[str, Any]] | None = None):
         self.api_key = api_key.strip()
         self.model = model
-        self.client = OpenAI(api_key=self.api_key) if (self.api_key and OpenAI is not None) else None
         self.training_rules = training_rules or []
+        self.client = None
 
-    @staticmethod
-    def _to_base64(path: str | Path) -> str:
-        with open(path, "rb") as f:
-            return base64.b64encode(f.read()).decode("utf-8")
+        if self.api_key and genai is not None:
+            genai.configure(api_key=self.api_key)
+            self.client = genai.GenerativeModel(self.model)
 
     @staticmethod
     def _heuristic_match(images: List[Dict[str, Any]], anchors: List[Dict[str, Any]]) -> List[PlacementDecision]:
@@ -41,11 +40,10 @@ class AIMatcher:
                     mode="below",
                     size_hint="medium",
                     confidence=0.45,
-                    reason="未配置 AI 或 AI 输出失败，按顺序把图片依次匹配到锚点。",
+                    reason="未配置 Gemini 或 Gemini 输出失败，按顺序把图片依次匹配到锚点。",
                 )
             )
         return placements
-
 
     def _rule_based_match(self, images: List[Dict[str, Any]], anchors: List[Dict[str, Any]]) -> tuple[List[PlacementDecision], List[Dict[str, Any]]]:
         placements: List[PlacementDecision] = []
@@ -84,9 +82,17 @@ class AIMatcher:
 
         return placements, remaining_images
 
+    @staticmethod
+    def _extract_json(text: str) -> Dict[str, Any]:
+        cleaned = text.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.strip("`")
+            if cleaned.startswith("json"):
+                cleaned = cleaned[4:].strip()
+        return json.loads(cleaned)
+
     def match(self, images: List[Dict[str, Any]], anchors: List[Dict[str, Any]], page_preview_map: Dict[int, str]) -> List[PlacementDecision]:
         trained_placements, remaining_images = self._rule_based_match(images, anchors)
-
         if not remaining_images:
             return trained_placements
 
@@ -94,22 +100,6 @@ class AIMatcher:
             return trained_placements + self._heuristic_match(remaining_images, anchors)
 
         try:
-            input_parts: List[Dict[str, Any]] = [
-                {
-                    "role": "system",
-                    "content": [
-                        {
-                            "type": "input_text",
-                            "text": (
-                                "你是一个 PDF 智能排版助手。任务：根据图片内容、锚点文字、页面截图，"
-                                "给每张图片选择最合适的锚点，并仅在 below/right/appendix_page 三种模式中选择一种。"
-                                "必须只返回 JSON，不能输出额外解释。"
-                            ),
-                        }
-                    ],
-                }
-            ]
-
             payload = {
                 "anchors": anchors,
                 "images": [{k: v for k, v in item.items() if k != "path"} for item in remaining_images],
@@ -117,8 +107,7 @@ class AIMatcher:
                 "rules": {
                     "modes": ["below", "right", "appendix_page"],
                     "notes": [
-                        "如果页面现有空间较少，优先选择 appendix_page。",
-                        "如果锚点右侧明显更自然，可选择 right。",
+                        "如果页面空间较少，优先 appendix_page。",
                         "常规情况优先 below。",
                     ],
                 },
@@ -132,55 +121,30 @@ class AIMatcher:
                             "mode": "below|right|appendix_page",
                             "size_hint": "small|medium|large",
                             "confidence": 0.95,
-                            "reason": "why"
+                            "reason": "why",
                         }
                     ]
                 },
             }
-            input_parts.append(
-                {
-                    "role": "user",
-                    "content": [{"type": "input_text", "text": json.dumps(payload, ensure_ascii=False)}],
-                }
+
+            prompt = (
+                "你是一个文档插图助手。请根据锚点和图片内容为每张图片匹配最合适锚点与插图模式。"
+                "只返回 JSON，不要输出任何额外解释。\n"
+                f"{json.dumps(payload, ensure_ascii=False)}"
             )
 
+            contents: List[Any] = [prompt]
             for image in remaining_images:
-                b64 = self._to_base64(image["path"])
-                input_parts[1]["content"].append(
-                    {
-                        "type": "input_text",
-                        "text": f"下面是一张用户上传图片，image_id={image['image_id']}，filename={image['filename']}。",
-                    }
-                )
-                input_parts[1]["content"].append(
-                    {
-                        "type": "input_image",
-                        "image_url": f"data:image/png;base64,{b64}",
-                    }
-                )
+                mime = mimetypes.guess_type(image["path"])[0] or "image/png"
+                with open(image["path"], "rb") as f:
+                    contents.append({"mime_type": mime, "data": f.read()})
+            for preview_path in page_preview_map.values():
+                with open(preview_path, "rb") as f:
+                    contents.append({"mime_type": "image/png", "data": f.read()})
 
-            for page_number, preview_path in page_preview_map.items():
-                b64 = self._to_base64(preview_path)
-                input_parts[1]["content"].append(
-                    {
-                        "type": "input_text",
-                        "text": f"下面是 PDF 第 {page_number} 页截图。",
-                    }
-                )
-                input_parts[1]["content"].append(
-                    {
-                        "type": "input_image",
-                        "image_url": f"data:image/png;base64,{b64}",
-                    }
-                )
-
-            response = self.client.responses.create(
-                model=self.model,
-                input=input_parts,
-                max_output_tokens=1800,
-            )
-            text = getattr(response, "output_text", "") or ""
-            data = json.loads(text)
+            response = self.client.generate_content(contents)
+            text = response.text or ""
+            data = self._extract_json(text)
             placements = [PlacementDecision(**item) for item in data.get("placements", [])]
             if not placements:
                 placements = self._heuristic_match(remaining_images, anchors)

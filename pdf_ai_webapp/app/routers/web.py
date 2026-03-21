@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from app.config import BASE_DIR, get_settings
-from app.services.project_service import process_pdf_project
+from app.services.project_service import process_document_project
 
 router = APIRouter()
 settings = get_settings()
@@ -22,6 +22,8 @@ def index(request: Request):
             "request": request,
             "app_name": settings.app_name,
             "default_anchors": "现场照片：\n产品说明：\n附件图：",
+            "default_training_rules": "# 每行: 关键词|锚点文字|模式(可选)\nsite|现场照片：|below\nproduct|产品说明：|right",
+            "default_provider": settings.ai_provider,
         },
     )
 
@@ -29,14 +31,17 @@ def index(request: Request):
 @router.post("/process", response_class=HTMLResponse)
 async def process(
     request: Request,
-    pdf_file: UploadFile = File(...),
+    doc_file: UploadFile = File(...),
     images: list[UploadFile] = File(...),
     anchors_text: str = Form(...),
+    training_rules_text: str = Form(""),
+    provider: str = Form("openai"),
 ):
-    if not pdf_file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="请上传 PDF 文件。")
+    suffix = Path(doc_file.filename).suffix.lower()
+    if suffix not in {".pdf", ".docx"}:
+        raise HTTPException(status_code=400, detail="请上传 PDF 或 Word(docx) 文件。")
     try:
-        result = process_pdf_project(pdf_file, images, anchors_text)
+        result = process_document_project(doc_file, images, anchors_text, training_rules_text, provider)
         return templates.TemplateResponse(
             "result.html",
             {
@@ -62,4 +67,9 @@ def download(job_id: str, filename: str):
     file_path = BASE_DIR / settings.output_dir / job_id / filename
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="文件不存在")
-    return FileResponse(path=file_path, filename=filename, media_type="application/pdf")
+
+    media_type = "application/pdf"
+    if filename.lower().endswith(".docx"):
+        media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+    return FileResponse(path=file_path, filename=filename, media_type=media_type)
