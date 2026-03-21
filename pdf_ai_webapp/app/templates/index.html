@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ app_name }}</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<div class="container">
+    <div class="hero">
+        <h1>{{ app_name }}</h1>
+        <p>上传 PDF 和多张图片，系统会先定位固定文字，再用 AI 判断图片应该跟哪个锚点绑定，最后生成新的 PDF。</p>
+    </div>
+
+    <div class="card">
+        <form action="/process" method="post" enctype="multipart/form-data">
+            <label>1. 上传 PDF</label>
+            <input type="file" name="pdf_file" accept=".pdf" required>
+
+            <label>2. 上传图片（可多选）</label>
+            <input type="file" name="images" accept="image/*" multiple required>
+
+            <label>3. 输入固定锚点文字（每行一个）</label>
+            <textarea name="anchors_text" rows="8" required>{{ default_anchors }}</textarea>
+
+            <button type="submit">开始处理</button>
+        </form>
+    </div>
+
+    <div class="tips">
+        <h3>建议</h3>
+        <ul>
+            <li>第一版先用“文字型 PDF”，不要一上来就拿纯扫描件测试。</li>
+            <li>锚点文字要和 PDF 中完全一致，包括冒号和空格。</li>
+            <li>如果没有配置 AI key，系统会按图片顺序依次匹配锚点，方便你先联通流程。</li>
+        </ul>
+    </div>
+</div>
+</body>
+</html>

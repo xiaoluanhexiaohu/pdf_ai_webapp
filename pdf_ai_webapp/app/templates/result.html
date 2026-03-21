@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>处理结果</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<div class="container">
+    <div class="hero">
+        <h1>处理结果</h1>
+    </div>
+
+    {% if error %}
+    <div class="card error">
+        <h2>处理失败</h2>
+        <p>{{ error }}</p>
+        <a class="btn-link" href="/">返回首页</a>
+    </div>
+    {% else %}
+    <div class="card success">
+        <h2>PDF 已生成</h2>
+        <p>任务编号：{{ result.job_id }}</p>
+        <a class="btn-link" href="/download/{{ result.job_id }}/{{ result.output_pdf_name }}">下载新 PDF</a>
+    </div>
+
+    <div class="card">
+        <h2>图片匹配结果</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>图片</th>
+                    <th>页码</th>
+                    <th>模式</th>
+                    <th>置信度</th>
+                    <th>原因</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for item in result.placements %}
+                <tr>
+                    <td>{{ item.filename }}</td>
+                    <td>{{ item.page_number }}</td>
+                    <td>{{ item.mode }}</td>
+                    <td>{{ '%.2f'|format(item.confidence) }}</td>
+                    <td>{{ item.reason }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="card">
+        <h2>排版备注</h2>
+        {% if result.notes %}
+            <ul>
+            {% for note in result.notes %}
+                <li>{{ note }}</li>
+            {% endfor %}
+            </ul>
+        {% else %}
+            <p>没有额外备注。</p>
+        {% endif %}
+    </div>
+
+    <a class="btn-link secondary" href="/">继续处理其他文件</a>
+    {% endif %}
+</div>
+</body>
+</html>
