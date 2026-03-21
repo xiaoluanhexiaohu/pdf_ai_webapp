@@ -23,7 +23,8 @@ def index(request: Request):
             "app_name": settings.app_name,
             "default_anchors": "现场照片：\n产品说明：\n附件图：",
             "default_training_rules": "# 每行: 关键词|锚点文字|模式(可选)\nsite|现场照片：|below\nproduct|产品说明：|right",
-            "default_provider": settings.ai_provider,
+            "default_provider": 
+        settings.ai_provider,
         },
     )
 

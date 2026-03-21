@@ -8,7 +8,10 @@ from app.config import BASE_DIR, get_settings
 from app.schemas.placement import ImageAsset, ProcessResult
 from app.services.ai_matcher import AIMatcher
 from app.services.docx_service import add_images_to_docx, find_anchor_candidates_docx
+
 from app.services.gemini_matcher import GeminiMatcher
+
+
 from app.services.layout_engine import LayoutConfig, LayoutEngine
 from app.services.pdf_parser import find_anchor_candidates, get_page_occupied_rects, render_page_to_image
 from app.services.pdf_writer import add_images_to_pdf
@@ -38,7 +41,9 @@ def _build_image_assets(image_uploads, job_upload_dir: Path) -> List[Dict[str, A
     return image_assets
 
 
+
 def process_document_project(document_upload, image_uploads, anchors_text: str, training_rules_text: str = "", provider: str = "") -> ProcessResult:
+
     settings = get_settings()
     job_id = make_job_id()
 
@@ -60,12 +65,14 @@ def process_document_project(document_upload, image_uploads, anchors_text: str, 
     added_rules = training_store.append_rules(training_rules)
     all_training_rules = training_store.load_rules()
 
+
     selected_provider = (provider or settings.ai_provider or "openai").lower()
 
     if source_suffix == ".pdf":
         result = _process_pdf(source_path, image_assets, anchors, all_training_rules, job_temp_dir, job_output_dir, job_id, selected_provider)
     elif source_suffix == ".docx":
         result = _process_docx(source_path, image_assets, anchors, all_training_rules, job_output_dir, job_id, selected_provider)
+
     else:
         raise ValueError("仅支持 PDF 或 Word(.docx) 文件。")
 
@@ -83,7 +90,9 @@ def _process_pdf(
     job_temp_dir: Path,
     job_output_dir: Path,
     job_id: str,
+
     provider: str,
+
 ) -> ProcessResult:
     anchor_candidates = find_anchor_candidates(pdf_path, anchors)
     if not anchor_candidates:
@@ -97,7 +106,9 @@ def _process_pdf(
         page_preview_map[page_number] = str(preview_path)
 
     settings = get_settings()
+
     matcher = _build_matcher(provider, settings, training_rules)
+
     placements = matcher.match(image_assets, anchor_candidates, page_preview_map)
 
     layout_engine = LayoutEngine(
@@ -168,14 +179,18 @@ def _process_docx(
     training_rules: List[Dict[str, Any]],
     job_output_dir: Path,
     job_id: str,
+
     provider: str,
+
 ) -> ProcessResult:
     anchor_candidates = find_anchor_candidates_docx(docx_path, anchors)
     if not anchor_candidates:
         raise ValueError("在 Word 中没有找到任何锚点文字，请检查文字是否和文档中完全一致。")
 
     settings = get_settings()
+
     matcher = _build_matcher(provider, settings, training_rules)
+
     placements = matcher.match(image_assets, anchor_candidates, {})
 
     anchor_map = {item["anchor_id"]: item for item in anchor_candidates}
@@ -216,10 +231,12 @@ def _process_docx(
 
 
 
+
 def _build_matcher(provider: str, settings, training_rules: List[Dict[str, Any]]):
     if provider == "gemini":
         return GeminiMatcher(api_key=settings.gemini_api_key, model=settings.gemini_model, training_rules=training_rules)
     return AIMatcher(api_key=settings.openai_api_key, model=settings.openai_model, training_rules=training_rules)
+
 
 def _save_summary(
     job_output_dir: Path,
