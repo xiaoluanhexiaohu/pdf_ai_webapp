@@ -14,10 +14,11 @@ from app.schemas.placement import PlacementDecision
 
 
 class AIMatcher:
-    def __init__(self, api_key: str = "", model: str = "gpt-4.1-mini"):
+    def __init__(self, api_key: str = "", model: str = "gpt-4.1-mini", training_rules: List[Dict[str, Any]] | None = None):
         self.api_key = api_key.strip()
         self.model = model
         self.client = OpenAI(api_key=self.api_key) if (self.api_key and OpenAI is not None) else None
+        self.training_rules = training_rules or []
 
     @staticmethod
     def _to_base64(path: str | Path) -> str:
@@ -45,9 +46,52 @@ class AIMatcher:
             )
         return placements
 
+
+    def _rule_based_match(self, images: List[Dict[str, Any]], anchors: List[Dict[str, Any]]) -> tuple[List[PlacementDecision], List[Dict[str, Any]]]:
+        placements: List[PlacementDecision] = []
+        remaining_images: List[Dict[str, Any]] = []
+
+        for image in images:
+            filename = image["filename"].lower()
+            matched_rule = None
+            for rule in self.training_rules:
+                keyword = str(rule.get("keyword", "")).strip().lower()
+                if keyword and keyword in filename:
+                    matched_rule = rule
+                    break
+
+            if not matched_rule:
+                remaining_images.append(image)
+                continue
+
+            anchor = next((a for a in anchors if a["anchor_text"] == matched_rule.get("anchor_text")), None)
+            if not anchor:
+                remaining_images.append(image)
+                continue
+
+            placements.append(
+                PlacementDecision(
+                    image_id=image["image_id"],
+                    filename=image["filename"],
+                    anchor_id=anchor["anchor_id"],
+                    page_number=anchor["page_number"],
+                    mode=matched_rule.get("mode", "below"),
+                    size_hint="medium",
+                    confidence=0.90,
+                    reason=f"命中训练规则：{matched_rule.get('keyword')} -> {matched_rule.get('anchor_text')}",
+                )
+            )
+
+        return placements, remaining_images
+
     def match(self, images: List[Dict[str, Any]], anchors: List[Dict[str, Any]], page_preview_map: Dict[int, str]) -> List[PlacementDecision]:
+        trained_placements, remaining_images = self._rule_based_match(images, anchors)
+
+        if not remaining_images:
+            return trained_placements
+
         if not self.client:
-            return self._heuristic_match(images, anchors)
+            return trained_placements + self._heuristic_match(remaining_images, anchors)
 
         try:
             input_parts: List[Dict[str, Any]] = [
@@ -68,7 +112,8 @@ class AIMatcher:
 
             payload = {
                 "anchors": anchors,
-                "images": [{k: v for k, v in item.items() if k != "path"} for item in images],
+                "images": [{k: v for k, v in item.items() if k != "path"} for item in remaining_images],
+                "training_rules": self.training_rules[:30],
                 "rules": {
                     "modes": ["below", "right", "appendix_page"],
                     "notes": [
@@ -99,7 +144,7 @@ class AIMatcher:
                 }
             )
 
-            for image in images:
+            for image in remaining_images:
                 b64 = self._to_base64(image["path"])
                 input_parts[1]["content"].append(
                     {
@@ -138,7 +183,7 @@ class AIMatcher:
             data = json.loads(text)
             placements = [PlacementDecision(**item) for item in data.get("placements", [])]
             if not placements:
-                return self._heuristic_match(images, anchors)
-            return placements
+                placements = self._heuristic_match(remaining_images, anchors)
+            return trained_placements + placements
         except Exception:
-            return self._heuristic_match(images, anchors)
+            return trained_placements + self._heuristic_match(remaining_images, anchors)

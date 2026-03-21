@@ -1,4 +1,4 @@
-from typing import List, Literal, Optional
+from typing import List, Literal
 from pydantic import BaseModel, Field
 
 
@@ -34,7 +34,8 @@ class PlacementDecision(BaseModel):
 
 class ProcessResult(BaseModel):
     job_id: str
-    output_pdf_name: str
-    output_pdf_path: str
+    output_file_name: str
+    output_file_path: str
+    output_type: Literal["pdf", "docx"]
     placements: List[PlacementDecision]
     notes: List[str] = []

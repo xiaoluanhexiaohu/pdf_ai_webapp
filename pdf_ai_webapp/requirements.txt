@@ -7,3 +7,4 @@ pillow>=10.0
 openai>=1.30
 pydantic-settings>=2.2
 python-dotenv>=1.0
+python-docx>=1.1
