@@ -23,6 +23,8 @@ def index(request: Request):
             "app_name": settings.app_name,
             "default_anchors": "现场照片：\n产品说明：\n附件图：",
             "default_training_rules": "# 每行: 关键词|锚点文字|模式(可选)\nsite|现场照片：|below\nproduct|产品说明：|right",
+            "default_provider": 
+        settings.ai_provider,
         },
     )
 
@@ -34,12 +36,13 @@ async def process(
     images: list[UploadFile] = File(...),
     anchors_text: str = Form(...),
     training_rules_text: str = Form(""),
+    provider: str = Form("openai"),
 ):
     suffix = Path(doc_file.filename).suffix.lower()
     if suffix not in {".pdf", ".docx"}:
         raise HTTPException(status_code=400, detail="请上传 PDF 或 Word(docx) 文件。")
     try:
-        result = process_document_project(doc_file, images, anchors_text, training_rules_text)
+        result = process_document_project(doc_file, images, anchors_text, training_rules_text, provider)
         return templates.TemplateResponse(
             "result.html",
             {

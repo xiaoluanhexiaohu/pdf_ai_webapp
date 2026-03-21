@@ -8,8 +8,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 class Settings(BaseSettings):
     app_name: str = "PDF AI 智能插图系统"
+    ai_provider: str = "openai"
     openai_api_key: str = ""
     openai_model: str = "gpt-4.1-mini"
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.5-flash"
     max_image_width_ratio: float = 0.42
     max_image_height_ratio: float = 0.28
     default_insert_gap: int = 12
