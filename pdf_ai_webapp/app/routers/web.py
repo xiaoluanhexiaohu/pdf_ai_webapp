@@ -74,7 +74,7 @@ async def train_rules(
     draft_doc_file: UploadFile = File(...),
     final_doc_file: UploadFile = File(...),
     train_images: list[UploadFile] = File(...),
-    anchors_text: str = Form(...),
+    anchors_text: str = Form(""),
     provider: str = Form("openai"),
 ):
     draft_suffix = Path(draft_doc_file.filename).suffix.lower()
@@ -83,8 +83,6 @@ async def train_rules(
         raise HTTPException(status_code=400, detail="训练前后文档仅支持 PDF 或 Word(docx)。")
 
     anchors = [line.strip() for line in anchors_text.splitlines() if line.strip()]
-    if not anchors:
-        raise HTTPException(status_code=400, detail="训练时至少要输入一个锚点。")
 
     try:
         train_result = train_rules_from_examples(
@@ -100,7 +98,7 @@ async def train_rules(
                 request,
                 generated_training_rules=train_result["rules_text"],
                 training_notes=train_result["notes"],
-                default_anchors=anchors_text,
+                default_anchors="\n".join(train_result.get("anchors", anchors)),
                 default_provider=provider,
             ),
         )
