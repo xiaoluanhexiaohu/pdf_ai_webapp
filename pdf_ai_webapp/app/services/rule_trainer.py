@@ -28,6 +28,124 @@ from app.utils.file_utils import ensure_dir, make_job_id, save_upload_file
 ALLOWED_MODES = {"below", "right", "appendix_page"}
 
 
+def _looks_like_anchor(line: str) -> bool:
+    cleaned = re.sub(r"\s+", " ", (line or "").strip())
+    if len(cleaned) < 2 or len(cleaned) > 40:
+        return False
+    return cleaned.endswith((":", "："))
+
+
+def _heuristic_infer_anchors(draft_excerpt: str, final_excerpt: str, limit: int = 8) -> List[str]:
+    draft_set = {line.strip() for line in draft_excerpt.splitlines() if line.strip()}
+    ranked: List[str] = []
+    seen = set()
+
+    for source in (final_excerpt, draft_excerpt):
+        for line in source.splitlines():
+            candidate = line.strip()
+            if not _looks_like_anchor(candidate):
+                continue
+            if candidate in seen:
+                continue
+            score = 0
+            if candidate not in draft_set and source == final_excerpt:
+                score += 3
+            if "图" in candidate or "照片" in candidate or "附件" in candidate:
+                score += 2
+            if candidate.endswith("："):
+                score += 1
+            ranked.append((score, candidate))
+            seen.add(candidate)
+
+    ranked.sort(key=lambda item: (-item[0], len(item[1])))
+    return [item[1] for item in ranked[:limit]]
+
+
+def _infer_anchors_with_openai(api_key: str, model: str, draft_excerpt: str, final_excerpt: str, images: List[Dict[str, str]]) -> List[str]:
+    if not api_key or OpenAI is None:
+        return []
+
+    client = OpenAI(api_key=api_key)
+    payload = {
+        "task": "从文档内容中推断适合作为插图定位的锚点短语，锚点应是文档中可搜索到的短文本（优先冒号结尾）。",
+        "draft_excerpt": draft_excerpt,
+        "final_excerpt": final_excerpt,
+        "image_filenames": [img["filename"] for img in images],
+        "output_schema": {"anchors": ["string"]},
+    }
+    response = client.responses.create(
+        model=model,
+        input=[
+            {
+                "role": "system",
+                "content": [{"type": "input_text", "text": "你是文档锚点提取器，只返回 JSON，不要额外解释。"}],
+            },
+            {
+                "role": "user",
+                "content": [{"type": "input_text", "text": json.dumps(payload, ensure_ascii=False)}],
+            },
+        ],
+        max_output_tokens=800,
+    )
+    data = _extract_json(getattr(response, "output_text", "") or "")
+    anchors = [str(item).strip() for item in data.get("anchors", []) if str(item).strip()]
+    return [item for item in anchors if _looks_like_anchor(item)]
+
+
+def _infer_anchors_with_gemini(api_key: str, model: str, draft_excerpt: str, final_excerpt: str, images: List[Dict[str, str]]) -> List[str]:
+    if not api_key or genai is None:
+        return []
+
+    genai.configure(api_key=api_key)
+    client = genai.GenerativeModel(model)
+    payload = {
+        "task": "从文档内容中推断适合作为插图定位的锚点短语，锚点应是文档中可搜索到的短文本（优先冒号结尾）。",
+        "draft_excerpt": draft_excerpt,
+        "final_excerpt": final_excerpt,
+        "image_filenames": [img["filename"] for img in images],
+        "output_schema": {"anchors": ["string"]},
+    }
+    response = client.generate_content(
+        [
+            "你是文档锚点提取器，只返回 JSON，不要额外解释。",
+            json.dumps(payload, ensure_ascii=False),
+        ]
+    )
+    data = _extract_json(response.text or "")
+    anchors = [str(item).strip() for item in data.get("anchors", []) if str(item).strip()]
+    return [item for item in anchors if _looks_like_anchor(item)]
+
+
+def infer_anchors_from_examples(
+    draft_excerpt: str,
+    final_excerpt: str,
+    images: List[Dict[str, str]],
+    provider: str,
+) -> List[str]:
+    settings = get_settings()
+    selected_provider = (provider or settings.ai_provider or "openai").lower()
+    inferred: List[str] = []
+    try:
+        if selected_provider == "gemini":
+            inferred = _infer_anchors_with_gemini(settings.gemini_api_key, settings.gemini_model, draft_excerpt, final_excerpt, images)
+        else:
+            inferred = _infer_anchors_with_openai(settings.openai_api_key, settings.openai_model, draft_excerpt, final_excerpt, images)
+    except Exception:
+        inferred = []
+
+    if not inferred:
+        inferred = _heuristic_infer_anchors(draft_excerpt, final_excerpt)
+
+    deduped: List[str] = []
+    seen = set()
+    for item in inferred:
+        if item in seen:
+            continue
+        deduped.append(item)
+        seen.add(item)
+    return deduped[:8]
+
+
 def _read_document_excerpt(doc_path: Path, max_chars: int = 5000) -> str:
     suffix = doc_path.suffix.lower()
     if suffix == ".pdf":
@@ -192,7 +310,7 @@ def train_rules_from_examples(
     draft_doc_upload,
     final_doc_upload,
     image_uploads,
-    anchors: List[str],
+    anchors: List[str] | None = None,
     provider: str = "openai",
 ) -> Dict[str, Any]:
     settings = get_settings()
@@ -209,6 +327,15 @@ def train_rules_from_examples(
 
     draft_excerpt = _read_document_excerpt(draft_path)
     final_excerpt = _read_document_excerpt(final_path)
+
+    anchors = [item.strip() for item in (anchors or []) if item and item.strip()]
+    auto_anchor_used = False
+    if not anchors:
+        anchors = infer_anchors_from_examples(draft_excerpt, final_excerpt, images, provider)
+        auto_anchor_used = True
+
+    if not anchors:
+        raise ValueError("无法自动提炼锚点，请手动输入至少一个锚点后重试。")
 
     raw_rules: List[Dict[str, Any]] = []
     selected_provider = (provider or settings.ai_provider or "openai").lower()
@@ -238,5 +365,11 @@ def train_rules_from_examples(
         "notes": [
             f"训练已完成，共生成 {len(rules)} 条规则。",
             f"已写入规则库 {added_count} 条，可直接在“训练规则”输入框复用。",
+            (
+                f"本次自动推断锚点：{', '.join(anchors)}"
+                if auto_anchor_used
+                else f"本次使用手动锚点：{', '.join(anchors)}"
+            ),
         ],
+        "anchors": anchors,
     }

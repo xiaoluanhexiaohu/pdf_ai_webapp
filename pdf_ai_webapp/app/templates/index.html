@@ -51,8 +51,8 @@
             <label>C. 上传训练图片（可多选）</label>
             <input type="file" name="train_images" accept="image/*" multiple required>
 
-            <label>D. 训练用锚点（每行一个）</label>
-            <textarea name="anchors_text" rows="6" required>{{ default_anchors }}</textarea>
+            <label>D. 训练用锚点（每行一个，可留空自动生成）</label>
+            <textarea name="anchors_text" rows="6" placeholder="可空着；系统会从训练前后文档自动推断锚点">{{ default_anchors }}</textarea>
 
             <label>E. AI 提供商</label>
             <select name="provider">
@@ -79,6 +79,7 @@
         <ul>
             <li>规则示例：<code>site|现场照片：|below</code>，表示文件名包含 site 的图片优先放到“现场照片：”。</li>
             <li>现在支持“训练输入窗口”：上传未完成文档、完成文档和训练图片后，系统会自动提炼规则。</li>
+            <li>训练锚点输入框可留空，系统会优先用 AI 自动推断锚点，失败时回落到启发式规则。</li>
             <li>训练输出规则会展示在页面中，可直接复制粘贴到主流程第 5 项中长期复用。</li>
 
             <li>如果选 Gemini，请在 <code>.env</code> 里配置 <code>GEMINI_API_KEY</code>。</li>
