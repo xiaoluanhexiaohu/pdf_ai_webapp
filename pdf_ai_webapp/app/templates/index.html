@@ -39,10 +39,47 @@
         </form>
     </div>
 
+    <div class="card">
+        <h3>训练：从“未完成文件 + 完成文件”自动生成规则</h3>
+        <form action="/train" method="post" enctype="multipart/form-data">
+            <label>A. 上传未完成文档（PDF 或 Word）</label>
+            <input type="file" name="draft_doc_file" accept=".pdf,.docx" required>
+
+            <label>B. 上传完成文档（PDF 或 Word）</label>
+            <input type="file" name="final_doc_file" accept=".pdf,.docx" required>
+
+            <label>C. 上传训练图片（可多选）</label>
+            <input type="file" name="train_images" accept="image/*" multiple required>
+
+            <label>D. 训练用锚点（每行一个）</label>
+            <textarea name="anchors_text" rows="6" required>{{ default_anchors }}</textarea>
+
+            <label>E. AI 提供商</label>
+            <select name="provider">
+                <option value="openai" {% if default_provider == "openai" %}selected{% endif %}>OpenAI</option>
+                <option value="gemini" {% if default_provider == "gemini" %}selected{% endif %}>Gemini</option>
+            </select>
+
+            <button type="submit">开始训练并生成规则</button>
+        </form>
+
+        <label class="output-label">训练后输出规则（可复制到上面的“训练规则”输入框）</label>
+        <textarea rows="8" readonly>{{ generated_training_rules }}</textarea>
+        {% if training_notes %}
+        <ul class="training-notes">
+            {% for note in training_notes %}
+            <li>{{ note }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+    </div>
+
     <div class="tips">
         <h3>训练说明</h3>
         <ul>
             <li>规则示例：<code>site|现场照片：|below</code>，表示文件名包含 site 的图片优先放到“现场照片：”。</li>
+            <li>现在支持“训练输入窗口”：上传未完成文档、完成文档和训练图片后，系统会自动提炼规则。</li>
+            <li>训练输出规则会展示在页面中，可直接复制粘贴到主流程第 5 项中长期复用。</li>
 
             <li>如果选 Gemini，请在 <code>.env</code> 里配置 <code>GEMINI_API_KEY</code>。</li>
 
