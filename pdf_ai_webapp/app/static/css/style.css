@@ -46,7 +46,7 @@ label {
     margin-bottom: 8px;
     font-weight: 600;
 }
-input[type=file], textarea {
+input[type=file], textarea, select {
     width: 100%;
     border-radius: 12px;
     border: 1px solid var(--line);
@@ -55,6 +55,8 @@ input[type=file], textarea {
     padding: 12px;
 }
 textarea { resize: vertical; }
+.output-label { margin-top: 20px; }
+.training-notes { margin-top: 10px; }
 button, .btn-link {
     display: inline-block;
     margin-top: 18px;

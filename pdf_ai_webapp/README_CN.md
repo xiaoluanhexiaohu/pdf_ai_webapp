@@ -258,6 +258,24 @@ http://127.0.0.1:8000
 
 ## 五、网页怎么使用
 
+---
+
+## 常见问题：PyCharm 弹出“Register New File Type Association（LICENCE）”怎么选
+
+如果你打开一个名为 `LICENCE`（无扩展名）的文件，PyCharm 可能会问你要把它关联成什么文件类型。  
+**建议直接选 `Text`（文本）**，这样最稳妥，不会影响项目运行。
+
+推荐操作：
+
+1. 在弹窗里选择 **Open matching files in PyCharm**；
+2. 在下面列表里选 **Text**；
+3. 点击 **OK**。
+
+可选优化（避免以后反复弹窗）：
+
+- 把文件名改成更常见的 `LICENSE`（或 `LICENSE.txt`）；
+- 或在 PyCharm 的 `Settings -> Editor -> File Types` 里手动把 `LICENCE` 关联到 Text。
+
 首页有 3 个输入：
 
 1. 上传 PDF；
